@@ -1,0 +1,54 @@
+{
+  "name": "nest-rabbit",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/maticapuano/nest-rabbit.git"
+  },
+  "description": "A powerful RabbitMQ module for NestJS applications with support for delayed messages, message priorities, and more.",
+  "bugs": {
+    "url": "https://github.com/maticapuano/nest-rabbit/issues"
+  },
+  "author": "Matias Capuano",
+  "license": "MIT",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "nestjs",
+    "rabbitmq",
+    "rabbit",
+    "amqp"
+  ],
+  "private": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.json && tsc-alias",
+    "start": "ts-node -r tsconfig-paths/register src/app.ts"
+  },
+  "dependencies": {
+    "amqp-connection-manager": "^4.1.14",
+    "amqplib": "^0.10.3"
+  },
+  "devDependencies": {
+    "@nestjs/common": "^11.0.20",
+    "@nestjs/core": "^11.0.20",
+    "@types/amqplib": "^0.10.7",
+    "@types/node": "^22.14.1",
+    "@typescript-eslint/eslint-plugin": "^8.30.1",
+    "@typescript-eslint/parser": "^8.30.1",
+    "eslint": "^9.24.0",
+    "prettier": "^3.5.3",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "ts-node": "^10.9.2",
+    "tsc-alias": "^1.8.15",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.8.3"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^8.0.0 || ^9.0.0 || ^10.0.0 || ^11.0.0",
+    "@nestjs/core": "^8.0.0 || ^9.0.0 || ^10.0.0 || ^11.0.0"
+  }
+}

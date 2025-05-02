@@ -1,0 +1,6 @@
+export const QUEUE_MODULE_OPTIONS = Symbol("QUEUE_MODULE_OPTIONS");
+
+export const QUEUE_METADATA = {
+  QUEUE_OPTIONS: Symbol("QUEUE_OPTIONS"),
+  PROCESSOR: Symbol("PROCESSOR"),
+};
