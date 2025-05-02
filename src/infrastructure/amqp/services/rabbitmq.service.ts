@@ -8,6 +8,7 @@ import {
 import { AmqpConnectionManager, ChannelWrapper, connect } from "amqp-connection-manager";
 import { ConfirmChannel } from "amqplib";
 import { RABBITMQ_OPTIONS } from "../constants/rabbitmq.constants";
+import { ConnectionStatus } from "../enums/connection-status.enum";
 import { RabbitMQException } from "../exceptions/rabbitmq.exception";
 import { AmqpOptions, PublishOptions } from "../interfaces/amqp-options.interface";
 
@@ -21,21 +22,46 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RabbitMQService.name);
   private isClosing = false;
   private readonly queues = new Set<string>();
+  private connectionStatus: ConnectionStatus = ConnectionStatus.DISCONNECTED;
+  private retryCount = 0;
+  private readonly maxRetries = 5;
+  private readonly retryDelay = 5000; // 5 seconds
 
   constructor(@Inject(RABBITMQ_OPTIONS) private readonly options: AmqpOptions) {
     this.initialize();
   }
 
   async onModuleInit(): Promise<void> {
-    await this.channelWrapper.waitForConnect();
-
-    this.logger.log("RabbitMQ connection established");
+    try {
+      this.logger.log("Attempting to establish RabbitMQ connection...");
+      await this.channelWrapper.waitForConnect();
+      this.connectionStatus = ConnectionStatus.CONNECTED;
+      this.retryCount = 0;
+      this.logger.log("RabbitMQ connection established successfully");
+    } catch (error) {
+      this.logger.error("Failed to establish initial RabbitMQ connection", error);
+      await this.handleConnectionFailure(error);
+    }
   }
 
   async onModuleDestroy(): Promise<void> {
     await this.closeConnection();
-
+    this.connectionStatus = ConnectionStatus.DISCONNECTED;
     this.logger.log("RabbitMQ connection closed successfully");
+  }
+
+  /**
+   * Get the current connection status
+   */
+  getConnectionStatus(): ConnectionStatus {
+    return this.connectionStatus;
+  }
+
+  /**
+   * Check if the connection is currently active
+   */
+  isConnected(): boolean {
+    return this.connectionStatus === ConnectionStatus.CONNECTED;
   }
 
   /**
@@ -196,34 +222,107 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * Handles the connection failure
+   * @param error - The error that occurred
+   */
+  private async handleConnectionFailure(error: any): Promise<void> {
+    if (this.retryCount < this.maxRetries) {
+      await this.retryConnection();
+      return;
+    }
+
+    await this.handleMaxRetriesExceeded(error);
+  }
+
+  /**
+   * Initializes the RabbitMQ connection
+   */
   private async initialize(): Promise<void> {
     try {
-      this.connection = connect(this.options.urls);
+      this.connectionStatus = ConnectionStatus.CONNECTING;
+      this.logger.log("Initializing RabbitMQ connection...");
+
+      this.connection = connect(this.options.urls, {
+        reconnectTimeInSeconds: 5,
+        heartbeatIntervalInSeconds: 30,
+      });
+
       this.channelWrapper = this.connection.createChannel({
         json: true,
         setup: async (channel: ConfirmChannel) => {
-          this.logger.log("Setting up RabbitMQ channel");
+          this.logger.log("Setting up RabbitMQ channel...");
           await channel.prefetch(1);
+          this.logger.log("RabbitMQ channel setup completed");
         },
       });
 
       this.handleConnectionEvents();
     } catch (error) {
-      throw new RabbitMQException("Failed to initialize RabbitMQ connection", error);
+      await this.handleConnectionFailure(error);
     }
   }
 
+  /**
+   * Handles the connection events
+   */
   private handleConnectionEvents(): void {
     this.connection.on("connect", () => {
-      this.logger.log("Connected to RabbitMQ");
+      this.connectionStatus = ConnectionStatus.CONNECTED;
+      this.retryCount = 0;
+      this.logger.log("Successfully connected to RabbitMQ");
     });
 
     this.connection.on("error", err => {
+      this.connectionStatus = ConnectionStatus.DISCONNECTED;
       this.logger.error(
         "RabbitMQ connection error",
         err instanceof Error ? err.stack : String(err),
       );
     });
+
+    this.connection.on("disconnect", () => {
+      this.connectionStatus = ConnectionStatus.DISCONNECTED;
+      this.logger.warn("Disconnected from RabbitMQ. Attempting to reconnect...");
+    });
+
+    this.connection.on("blocked", reason => {
+      this.logger.warn(`RabbitMQ connection blocked: ${reason}`);
+    });
+
+    this.connection.on("unblocked", () => {
+      this.logger.log("RabbitMQ connection unblocked");
+    });
+  }
+
+  /**
+   * Retries the connection to RabbitMQ
+   */
+  private async retryConnection(): Promise<void> {
+    this.retryCount++;
+    this.logger.warn(
+      `Connection attempt ${this.retryCount}/${this.maxRetries} failed. Retrying in ${this.retryDelay / 1000} seconds...`,
+    );
+
+    await new Promise(resolve => setTimeout(resolve, this.retryDelay));
+    await this.initialize();
+  }
+
+  /**
+   * Handles the case where the maximum number of retries has been exceeded
+   * @param error - The error that occurred
+   */
+  private async handleMaxRetriesExceeded(error: any): Promise<void> {
+    this.connectionStatus = ConnectionStatus.DISCONNECTED;
+    this.logger.error(
+      `Failed to establish RabbitMQ connection after ${this.maxRetries} attempts`,
+      error,
+    );
+
+    throw new RabbitMQException(
+      `Failed to establish RabbitMQ connection after ${this.maxRetries} attempts`,
+      error,
+    );
   }
 
   /**
