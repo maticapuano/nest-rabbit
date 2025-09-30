@@ -28,7 +28,7 @@
     "start": "ts-node -r tsconfig-paths/register src/app.ts"
   },
   "dependencies": {
-    "amqp-connection-manager": "^4.1.14",
+    "amqp-connection-manager": "^5.0.0",
     "amqplib": "^0.10.7"
   },
   "devDependencies": {
